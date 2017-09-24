@@ -27,11 +27,10 @@ Fuzz testers can adapt their fuzzer easily.
 1. Please fill the contents in config.py. (Important)
 
    ```python
-   FUZZER_NAME = "" # AWESOMEFUZZER
-   FUZZING_TARGET = "" # Weak_application
-   BINARY = "" # your_fuzzer
-   SERVER_URL = "" # sub.domain.com / 127.0.0.1
-   SERVER_PROTOCOL = "https://" # or http://
+    FUZZER_NAME = ""  # Name of fuzzer
+    FUZZING_TARGET = ""  # Target application
+    SERVER_URL = ""  # sub.domain.com
+    SERVER_PROTOCOL = ""  # https:// or http://
    ```
 
 2. Run install.py
@@ -53,18 +52,16 @@ Fuzz testers can adapt their fuzzer easily.
 1. Simple Test
 
    ```python
-   from sweetmon import *
+    from sweetmon import Fuzzer
 
-   # Init
-   F = Fuzzer()
+    # Test PING
+    print("START TEST / LOAD CONFIG")
 
-   # F.Ping()
-   print("PING Test", F.Ping()) # Ping to server
-
-   # Upload("Title string", "Log string", "/Crash/location")
-   print("Upload Test", F.Upload("AddressSanitizer: heap-buffer-overflow ...", "LOG Contents", "./sweetfuzz/crash/crash1"))
-
-   print("END OF TEST..")
+    f = Fuzzer()
+    # print("TEST AUTO PING", F.RunPingThread())
+    print("TEST PING", f.ping())
+    print("TEST UPLOAD", f.upload_file("test", "here\nis_l0g", "config.json"))
+    print("END OF TEST..")
    ```
 
    ​
@@ -80,26 +77,27 @@ Fuzz testers can adapt their fuzzer easily.
 ### Information
 
 ```json
-# YOU CAN MODIFY GLOBAL INFO
+# Server Information
 GLOBALINFO = {
-	"SERVER_URL" : SERVER_URL, # Sweetmon
-	"SERVER_PROTOCOL" : SERVER_PROTOCOL, # Protocol, Default
-	"TIME_PING" : 60 # Sec (Seconds)
+    "SERVER_URL": SERVER_URL,
+    "SERVER_PROTOCOL": SERVER_PROTOCOL,
+    "TIME_PING": 60  # Second
 }
 
-# DO NOT MODIFY FUZZERINFO
+
+# !WARNING! Do not modify this configuration
+# Fill Automatic
 FUZZERINFO = {
-	# Fill Automatic
-	"FUZZERNAME":FUZZER_NAME,
-	"TARGET":FUZZING_TARGET,
-	"OWNER":"",
-	"CURRENT_DIR":"",
-	"TOKEN":"",
-	"MACHINE" : {
-		"OS" : None,
-		"IP_PUB" : "",
-		"IP_PRI" : "",
-	},
+    "name": FUZZER_NAME,
+    "target": FUZZING_TARGET,
+    "owner": "",
+    "current_path": "",
+    "token": "",
+    "machine": {
+        "os": None,
+        "public_ip": "",
+        "private_ip": "",
+    },
 }
 ```
 

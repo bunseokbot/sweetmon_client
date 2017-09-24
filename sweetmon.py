@@ -1,123 +1,101 @@
-from config import *
+"""sweetmon client."""
+
+from config import GLOBALINFO, FUZZERINFO
 import requests
 import json
 import inspect
 import threading
 
-##########################################################
-# Define URL
-##########################################################
+# Server URL configuration
 URL = GLOBALINFO["SERVER_PROTOCOL"] + GLOBALINFO["SERVER_URL"]
-URL_FUZZ = URL+"/fuzz"
-URL_UPLOAD = URL+"/fuzz/crash"
-URL_PING = URL+"/fuzz/ping"
-URL_MACHINE = URL+"/machine"
-URL_REGISTER = URL+"/fuzz/register"
+URL_FUZZ = URL + "/fuzz"
+URL_UPLOAD = URL + "/fuzz/crash"
+URL_PING = URL + "/fuzz/ping"
+URL_MACHINE = URL + "/machine"
+URL_REGISTER = URL + "/fuzz/register"
 
-##########################################################
-# Define REQUESTS
-##########################################################
-# To prevent blocking by CSRF protection in Django.
-DEFAULTHEADER = {"Cookie" : "csrftoken=sweetfuzz", "X-CSRFTOKEN":"sweetfuzz", "Referer":URL}
+# Default POST header.
+HEADER = {
+    "Cookie": "csrftoken=sweetfuzz",
+    "X-CSRFTOKEN": "sweetfuzz",
+    "Referer": URL
+}
 
 
-def POST(url, data, header=DEFAULTHEADER, **kwargs):
-	# Wrap requests.post method
-	# url : Str, data : Dict, header : Dict
-	req = requests.post(url, headers=header, data=data, **kwargs)
-	result = req
-	return result
+class Fuzzer(object):
+    """Sweetfuzz fuzzer class."""
 
-##########################################################
-# Define Fuzzer Class
-##########################################################
-class Fuzzer:
-	"""
-		Fuzzing Fuzzing Fuzzing!
+    def __init__(self):
+        """Construct Fuzzer class."""
+        self.fuzzerinfo = FUZZERINFO
+        self.token = FUZZERINFO["token"]
+        self.current_path = FUZZERINFO["current_path"]
 
-	"""
-	def __init__(self):
+        # Fuzzer testcase and crash count
+        self.testcases = 0
+        self.crashes = 0
 
-		self.FUZZERINFO = FUZZERINFO
-		self.__initComplete = False; # Check init status.
+    def count_testcase(self):
+        """Count testcases."""
+        return self.testcases
 
-		self.__numTestcase__ = 0;
-		self.__numCrashes__ = 0;
-		
-		# Values comes from FUZZERINFO
-		self.__token = None
-		# self.__binary = None # deprecated
-		self.__currentdir = None
+    def count_crash(self):
+        """Count crashes."""
+        return self.crashes
 
-		self.__ParseInfo__() # Init Essential info
+    def set_fuzzerinfo(self, fuzzerinfo):
+        """Update fuzzerinfo."""
+        self.fuzzerinfo = fuzzerinfo
+        self.token = fuzzerinfo["token"]
+        self.current_path = fuzzerinfo["current_path"]
 
-	def __ParseInfo__(self):
-		# Parse Machine Information from FUZZERINFO
-		# Token, Binary name, Current Directory
-		fuzzerInfo = self.FUZZERINFO
-		self.__token = fuzzerInfo["TOKEN"]
-		# self.__binary = fuzzerInfo["BINARY"] # deprecated
-		self.__currentdir = fuzzerInfo["CURRENT_DIR"]
-		self.__initComplete = True
-		return 1;
+    def send_machineinfo(self):
+        """Send machine information to server."""
+        data = {"INFO": json.dumps(self.fuzzerinfo)}
+        self.post_data(URL_MACHINE, data)
 
-	#################################################################
-	# Get / Set variable
-	#################################################################
-	def GetTestcaseCount(self):
-		return self.__numTestcase__
+    def ping(self):
+        """Send ping to server."""
+        try:
+            data = {"token": self.token}
+            result = self.post_data(URL_PING, data).text
+            if result == "Done!":
+                return True
+        except Exception as e:
+            print("[*] Error at %s" % inspect.stack()[0][3], e)
+            return False
 
-	def GetCrashCount(self):
-		return self.__numCrashes__
+    def ping_thread(self):
+        """Send ping thread 60 seconds."""
+        print("[*] Tick ..")
+        self.ping()
+        threading.Timer(60, self.ping_thread).start()
+        return True
 
-	def SetFUZZERINFO(self, NEWFUZZERINFO):
-		self.FUZZERINFO = NEWFUZZERINFO
-		self.__ParseInfo__()
-		return True
+    def upload_file(self, title, crashlog, filename):
+        """Upload crashfile to server."""
+        data = {"token": self.token, "crashlog": crashlog, "title": title}
+        fdata = {'file': open(filename, 'rb')}
+        self.post_data(URL_UPLOAD, data=data, files=fdata)
 
-	#################################################################
-	# Interaction with server
-	#################################################################
-	def SendMachineInfo(self):
-		strFuzzerInfo = json.dumps(self.FUZZERINFO)
-		data = {"INFO" : self.FUZZERINFO}
-		req = POST(URL_MACHINE, data)
-		return 1;
+    def register(self, password):
+        """Register fuzzer info server."""
+        data = {
+            "userkey": password,
+            "fuzzer_name": self.fuzzerinfo["name"],
+            "pub_ip": self.fuzzerinfo["machine"]["public_ip"],
+            "pri_ip": self.fuzzerinfo["machine"]["private_ip"],
+            "target": self.fuzzerinfo["target"]
+        }
 
-	def Ping(self):
-		data = {"token" : self.__token}
-		result = ""
-		try:
-			result = POST(URL_PING, data).text
-		except Exception as e:
-			print("[*] Error at %s" % inspect.stack()[0][3], e)
-		if result == "Done!":
-			return True;
-		return False;
+        result = self.post_data(URL_REGISTER, data).text
 
-	def RunPingThread(self):
-		print("[*] Tick ..")
-		self.Ping()
-		threading.Timer(60,self.RunPingThread).start()
-		return True
+        if len(result) == 40:
+            print("[*] Success, Your token is : " + result)
+            return result
 
-	def Upload(self, title, crashLog, fname):
-		data = {"token": self.__token, "crashlog": crashLog, "title": title}
-		fdata = {'file': open(fname,'rb')}
-		req = POST(URL_UPLOAD, data=data, files=fdata)
-		return True;
+        return False
 
-	def Register(self, password):
-		fuzzerInfo = self.FUZZERINFO
-		
-		data = { "userkey" : password, "fuzzer_name" : fuzzerInfo["FUZZERNAME"],
-		"pub_ip" : fuzzerInfo["MACHINE"]["IP_PUB"],
-		"pri_ip":fuzzerInfo["MACHINE"]["IP_PRI"], "target":fuzzerInfo["TARGET"]}
-
-		result = POST(URL_REGISTER, data).text
-
-		if len(result) == 40:
-			print("[*] Success, Your token is : "+result)
-			return result
-		
-		return False
+    def post_data(self, url, data, header=HEADER, **kwargs):
+        """POST Data to server."""
+        return requests.post(url, headers=header, data=data, **kwargs)

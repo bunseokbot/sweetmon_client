@@ -1,210 +1,186 @@
-########################################################
-# PROJECT SWEETMON CLIENT
-# Optimized Libfuzzer
-########################################################
-import json
+"""sweetmon client configuration read-write file."""
+
 import requests
 import platform
 import getpass
 import socket
+import json
 import os
 
-# STATIC CONFIG
-########################################################################
-# Configuration
-fConfigFile = "config.json"
+# Configuration JSON filename
+filename = "config.json"
 
-# Debug
-isDebug = True
-
-########################################################################
-
-# User Define Status
-########################################################################
-FUZZER_NAME = "" # AWESOMEFUZZER
-FUZZING_TARGET = "" # Target application
-SERVER_URL = "" # sub.domain.com
-SERVER_PROTOCOL = "" # https:// or http://
-
-if isDebug == True:
-	FUZZER_NAME = "TESTFUZZ"
-	FUZZING_TARGET = "TESTTARGET"
-	SERVER_URL = "localhost:8000"
-	SERVER_PROTOCOL = "http://"
-########################################################################
+# Is client mode is debugging
+debug = True
 
 # Fuzzer Information
-########################################################################
-# YOU CAN MODIFY GLOBAL INFO
+FUZZER_NAME = ""  # Name of fuzzer
+FUZZING_TARGET = ""  # Target application
+SERVER_URL = ""  # sub.domain.com
+SERVER_PROTOCOL = ""  # https:// or http://
+
+# If user set as debug mode
+if debug:
+    FUZZER_NAME = "TESTFUZZ"
+    FUZZING_TARGET = "TESTTARGET"
+    SERVER_URL = "localhost:8000"
+    SERVER_PROTOCOL = "http://"
+
+
+# Server Information
 GLOBALINFO = {
-	"SERVER_URL" : SERVER_URL, # Sweetmon
-	"SERVER_PROTOCOL" : SERVER_PROTOCOL, # Protocol, Default
-	"TIME_PING" : 60 # Sec (Seconds)
+    "SERVER_URL": SERVER_URL,
+    "SERVER_PROTOCOL": SERVER_PROTOCOL,
+    "TIME_PING": 60  # Second
 }
 
-# DO NOT MODIFY FUZZERINFO
+
+# !WARNING! Do not modify this configuration
+# Fill Automatic
 FUZZERINFO = {
-	# Fill Automatic
-	"FUZZERNAME":FUZZER_NAME,
-	"TARGET":FUZZING_TARGET,
-	"OWNER":"",
-	"CURRENT_DIR":"",
-	"TOKEN":"",
-	"MACHINE" : {
-		"OS" : None,
-		"IP_PUB" : "",
-		"IP_PRI" : "",
-	},
+    "name": FUZZER_NAME,
+    "target": FUZZING_TARGET,
+    "owner": "",
+    "current_path": "",
+    "token": "",
+    "machine": {
+        "os": None,
+        "public_ip": "",
+        "private_ip": "",
+    },
 }
 
-INFO = {"GLOBALINFO" : GLOBALINFO, "FUZZERINFO" : FUZZERINFO }
+# Information of fuzzer and server
+INFO = {"GLOBALINFO": GLOBALINFO, "FUZZERINFO": FUZZERINFO}
 
-########################################################################
+
+class Machine(object):
+    """Get information of machine."""
+
+    def __init__(self, fuzzerinfo):
+        """Contstruct Machine class."""
+        self.os = self.set_osinfo()
+        self.public_ip = self.set_public_ip()
+        self.private_ip = self.set_private_ip()
+        self.current_path = self.set_current_path()
+        self.username = self.set_username()
+        self.fuzzerinfo = fuzzerinfo
+        self.token = None
+
+    def set_osinfo(self):
+        """Set Operation System information."""
+        return "{} {}".format(platform.system(), platform.release())
+
+    def get_osinfo(self):
+        """Get Operation System information."""
+        return self.os
+
+    def set_public_ip(self):
+        """Set machine public ip address."""
+        host = "http://httpbin.org/ip"
+        try:
+            req = requests.get(host).text
+            return json.loads(req)['origin']
+        except:
+            print("Could not get IP from {} (Check your internet connection)"
+                  .format(host))
+            return None
+
+    def get_public_ip(self):
+        """Get machine public ip address."""
+
+    def set_private_ip(self):
+        """Set machine private ip address."""
+        host = "httpbin.org"
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((host, 80))
+            private_ip = s.getsockname()[0]
+            s.close()
+            return private_ip
+        except:
+            print("Could not get Private IP address from {}".format(host))
+            return None
+
+    def get_private_ip(self):
+        """Get machine private ip address."""
+        return self.private_ip
+
+    def set_current_path(self):
+        """Set current path."""
+        return os.path.dirname(os.path.abspath(__file__))
+
+    def get_current_path(self):
+        """Get current path."""
+        return self.current_path
+
+    def set_username(self):
+        """Set machine username."""
+        return getpass.getuser()
+
+    def get_username(self):
+        """Get machine username."""
+        return self.username
+
+    def get_token(self):
+        """Get machine token."""
+        return self.token
+
+    def set_token(self, token):
+        """Set new updated token."""
+        self.token = token
+        self.update()
+
+    def check_token(self):
+        """Check token exist."""
+        if self.token is None:
+            return False
+        return True
+
+    def update_info(self):
+        """Update machine information."""
+        self.set_osinfo()
+        self.set_public_ip()
+        self.set_private_ip()
+        self.set_username()
+        self.set_current_path()
+
+        # Update fuzzer information
+        self.fuzzerinfo["owner"] = self.username
+        self.fuzzerinfo["current_path"] = self.current_path
+        self.fuzzerinfo["machine"]["os"] = self.os
+        self.fuzzerinfo["machine"]["public_ip"] = self.public_ip
+        self.fuzzerinfo["machine"]["private_ip"] = self.private_ip
+
+        self.fuzzerinfo["token"] = self.token
 
 
-class Machine:
-	"""
-		Filling information of Machine
-			OS, IP(Public, Private), Current Path, User Name
-	"""
-	def __init__(self, FUZZERINFO):
-		self.os = None
-		self.pubIp = None
-		self.priIp = None
-		self.currentPath = None
-		self.userName = None
-		self.FUZZERINFO = FUZZERINFO
-		self.token = None
+def load_config():
+    """Load configuration file."""
+    with open(filename) as f:
+        return json.loads(f.read())
 
-	def __GetOS(self):
-		# Expected Result : Windows 10
-		self.os = platform.system() + " " + platform.release()
-		return True
 
-	def __GetPubIP(self):
-		HOST = "http://httpbin.org/ip"
-		try:
-			req = requests.get(HOST).text
-			pubIp = json.loads(req)['origin']
-			self.pubIp = pubIp
-		except Exception as e:
-			print("Could not get IP from "+HOST+" (Check your internet connection)")
-			return False
-		return True
+def save_config(fuzzer):
+    """Save configration setting info file."""
+    with open(filename, "w") as f:
+        f.write(json.dumps(fuzzer, indent=4))
 
-	def __GetPriIP(self):
-		HOST = "httpbin.org"
-		try:
-			s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			s.connect((HOST, 80))
-			priIp = s.getsockname()[0]
-			s.close()
-		except Exception as e:
-			print("Could not get Private IP address from %s" % HOST)
-		self.priIp = priIp
-		return True
 
-	def __GetCurrentPath(self):
-		result = os.path.dirname(os.path.abspath(__file__))
-		self.currentPath = result
-		return True
+requirements = [FUZZER_NAME, FUZZING_TARGET, SERVER_URL, SERVER_PROTOCOL]
 
-	def __GetUserName(self):
-		result = getpass.getuser()
-		self.userName = result
-		return True
-
-	def GetToken(self):
-		return self.token
-
-	def SetToken(self, newToken):
-		# Note that you should run Update() method after run this method.
-		self.token = newToken
-		self.Update()
-		return True
-
-	def __CheckToken(self):
-		if self.token == None:
-			print("[*] You should register on SWEETMON before running fuzzer.")
-
-	def Update(self):
-		# Update Information
-		self.__GetOS()
-		self.__GetPubIP()
-		self.__GetPriIP()
-		self.__GetUserName()
-		self.__GetCurrentPath()
-
-		# Fill it to dictionary
-		self.FUZZERINFO["OWNER"] = self.userName
-		self.FUZZERINFO["CURRENT_DIR"] = self.currentPath
-		self.FUZZERINFO["MACHINE"]["OS"] = self.os
-		self.FUZZERINFO["MACHINE"]["IP_PUB"] = self.pubIp
-		self.FUZZERINFO["MACHINE"]["IP_PRI"] = self.priIp
-
-		self.FUZZERINFO["TOKEN"] = self.token
-
-		return FUZZERINFO
-
-	def Export(self):
-		return self.FUZZERINFO
-		
-
-# Configuration Files
-def LoadConfig():
-	# Load configuration file from 'fConfigFile'
-	f = open(fConfigFile, "rb")
-	result = f.read()
-	f.close()
-
-	objDict = json.loads(result)
-	
-	return objDict
-
-def SaveConfig(dictionary):
-	strDict = json.dumps(dictionary)
-	f = open(fConfigFile, "wb")
-	f.write(bytes(strDict))
-	f.close()
-
-	return True
-
-def CreateConfig(FUZZERINFO):
-	SaveConfig(FUZZERINFO)
-	return True
-
-# Tools
-def CHECKNULL(*args):
-	for arg in args:
-		if arg == "" or arg == None:
-			print("Please fill variable first.")
-			return True
-	return False
-
-def DBGPRINT(*args):
-	if isDebug == True:
-		print(args)
-
-#######################################################################
-# MAIN
-#######################################################################
-# Check config variable
-checkList = [FUZZER_NAME, FUZZING_TARGET, SERVER_URL, SERVER_PROTOCOL] # BINARY
-for element in checkList:
-	if CHECKNULL(element):
-		print("[*] Please fill blank variable.")
-		exit(-1)
+# Check null value in requirements variable
+if None in requirements:
+    print("[*] Please fill blank variable.")
+    exit(-1)
 
 # Check Config file
-if not os.path.exists(fConfigFile):
-	print("[*] Create new Configuration file")
+if not os.path.exists(filename):
+    print("[*] Create new Configuration file")
 
-	machine = Machine(FUZZERINFO)
-	machine.Update()
-	FUZZERINFO = machine.Export()
+    machine = Machine(FUZZERINFO)
+    machine.update_info()
 
-	CreateConfig(FUZZERINFO)
+    save_config(machine.fuzzerinfo)
 else:
-	FUZZERINFO = LoadConfig()
-
-DBGPRINT("[*] Config file loaded.")
+    FUZZERINFO = load_config()
